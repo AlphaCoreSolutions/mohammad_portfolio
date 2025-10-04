@@ -1,9 +1,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // for LogicalKeyboardKey
+// ignore: depend_on_referenced_packages
+import 'package:url_launcher/url_launcher.dart';
 
-void main() =>
-    runApp(const MaterialApp(home: MyApp(), debugShowCheckedModeBanner: false));
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MaterialApp(home: MyApp(), debugShowCheckedModeBanner: false));
+}
 
 const _bgTop = Color(0xFFE9F0F3);
 const _bgBottom = Color(0xFFA2A5AC);
@@ -45,6 +49,19 @@ class MyApp extends StatelessWidget {
     );
 
     return Theme(data: theme, child: const PortfolioShell());
+  }
+}
+
+Future<void> _safeLaunch(Uri uri, {LaunchMode? mode}) async {
+  try {
+    final ok = await launchUrl(uri, mode: mode ?? LaunchMode.platformDefault);
+    if (!ok) {
+      debugPrint('Could not launch: $uri');
+      // Optional: show a SnackBar for UX
+      // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cannot open $uri')));
+    }
+  } catch (e, st) {
+    debugPrint('launch error: $e\n$st');
   }
 }
 
@@ -107,7 +124,6 @@ class _PortfolioShellState extends State<PortfolioShell> {
         },
         child: Stack(
           children: [
-            // Background gradient
             // Background gradient that evolves per tab
             Positioned.fill(
               child: AnimatedContainer(
@@ -132,15 +148,17 @@ class _PortfolioShellState extends State<PortfolioShell> {
               itemCount: _sections.length,
               physics: const PageScrollPhysics(),
               itemBuilder: (context, i) {
+                final isCurrent = i == _index;
                 final nearby = (i - _index).abs() <= 1;
-                return AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 320),
-                  child: nearby
-                      ? _sections[i].builder(context)
-                      : const Center(
-                          child: CircularProgressIndicator(strokeWidth: 1.4),
-                        ),
-                );
+
+                final child = nearby
+                    ? _sections[i].builder(context)
+                    : const Center(
+                        child: CircularProgressIndicator(strokeWidth: 1.4),
+                      );
+
+                // Disable tickers when the page isn't current
+                return TickerMode(enabled: isCurrent, child: child);
               },
             ),
 
@@ -205,6 +223,13 @@ class _HeroSectionState extends State<_HeroSection>
     parent: _inCtrl,
     curve: Curves.easeOut,
   );
+
+  @override
+  void dispose() {
+    _inCtrl.stop();
+    _inCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -306,17 +331,18 @@ class _HeroSectionState extends State<_HeroSection>
                     alignment:
                         WrapAlignment.spaceEvenly, // spread across the row
                     children: const [
-                      _HeroChip(label: 'Flutter & .NET Experts'),
-                      _HeroChip(label: 'Enterprise • MENA'),
-                      _HeroChip(label: '99.96% Uptime SLO'),
-                      _HeroChip(label: 'Clean Code • Elegant UX'),
-                      _HeroChip(label: 'Observability by Default'),
+                      _HeroChip(
+                        label: 'Cross-Platform Apps (Flutter • Web • Mobile)',
+                      ),
+                      _HeroChip(label: 'Robust APIs & Integrations (.NET)'),
+                      _HeroChip(label: 'Secure Auth & Data Protection'),
+                      _HeroChip(label: 'Performance, Monitoring & Analytics'),
                     ],
                   ),
                 ),
               ),
 
-              SizedBox(height: extraBottom),
+              SizedBox(height: 5),
             ],
           ),
         );
@@ -367,6 +393,13 @@ class _SectionRevealState extends State<_SectionReveal>
           curve: const Interval(.25, 1, curve: Curves.easeOutCubic),
         ),
       );
+
+  @override
+  void dispose() {
+    _ctrl.stop();
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -475,12 +508,13 @@ class _HeroChip extends StatelessWidget {
 
 class _NoGlowBehavior extends ScrollBehavior {
   @override
-  // ignore: override_on_non_overriding_member
-  Widget buildViewportChrome(
+  Widget buildOverscrollIndicator(
     BuildContext context,
     Widget child,
-    AxisDirection axisDirection,
-  ) => child;
+    ScrollableDetails details,
+  ) {
+    return child; // remove glow on all platforms
+  }
 }
 
 /// 2) METRICS — responsive cards (wrap nicely, no overflow)
@@ -705,10 +739,9 @@ class _ContactSection extends StatelessWidget {
   const _ContactSection();
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return _SectionReveal(
       title: 'Let’s build something unmistakable.',
-      subtitle: 'Available for strategic projects in MENA & beyond.',
+      subtitle: 'Partnering on high-impact builds across MENA and beyond.',
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(
@@ -745,22 +778,66 @@ class _ContactSection extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    SelectableText(
-                      'mohammad@visioncit.com',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(fontSize: 15),
+                    GestureDetector(
+                      onTap: () async {
+                        final uri = Uri(
+                          scheme: 'mailto',
+                          path: 'mohammad@visioncit.com',
+                        );
+                        await Clipboard.setData(
+                          const ClipboardData(text: 'mohammad@visioncit.com'),
+                        );
+                        await _safeLaunch(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                      child: Text(
+                        'mohammad@visioncit.com',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontSize: 15,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
                     ),
                     const SizedBox(
                       width: 60,
                       child: Divider(thickness: 1.5, color: Colors.black26),
                     ),
                     const SizedBox(height: 5),
-                    SelectableText(
-                      '+962 7 7611 0639',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyLarge?.copyWith(fontSize: 15),
+                    GestureDetector(
+                      onTap: () async {
+                        final uri = Uri(scheme: 'tel', path: '+962776110639');
+                        await _safeLaunch(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                      child: Text(
+                        '+962 7 7611 0639',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontSize: 15,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: () async {
+                        final whatsapp = Uri.parse(
+                          'https://wa.me/962776110639',
+                        );
+                        await _safeLaunch(
+                          whatsapp,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      },
+                      child: Text(
+                        'Tap here to connect instantly via WhatsApp for professional inquiries.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -777,18 +854,9 @@ class _ContactSection extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _Chip(scheme, 'Business Development'),
-                        _Chip(scheme, 'Project Management'),
-                        _Chip(scheme, 'Flutter'),
-                        _Chip(scheme, '.NET'),
-                        _Chip(scheme, 'Firebase/FCM'),
-                        _Chip(scheme, 'Google Maps'),
-                      ],
-                    ),
+
+                    // ⬇️ Use the groups directly; don't put it inside another Wrap.
+                    const _CapabilityGroups(),
                   ],
                 ),
               ),
@@ -801,6 +869,7 @@ class _ContactSection extends StatelessWidget {
     );
   }
 
+  /*
   Widget _Chip(ColorScheme scheme, String label) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     decoration: BoxDecoration(
@@ -816,6 +885,7 @@ class _ContactSection extends StatelessWidget {
       ),
     ),
   );
+  */
 }
 
 /// ------- Right Tabs (overlay) -------
@@ -1164,6 +1234,236 @@ class _InfoBox extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- Capabilities Section (grouped, responsive, animated) ---
+/*
+class _CapabilitiesSection extends StatelessWidget {
+  const _CapabilitiesSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionReveal(
+      title: 'Capabilities',
+      subtitle: 'From discovery to delivery — end-to-end execution.',
+      body: const _CapabilityGroups(),
+      footnote: 'Built for reliability, speed, and maintainability.',
+    );
+  }
+}
+*/
+
+class _CapabilityGroups extends StatelessWidget {
+  const _CapabilityGroups();
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final cols = size.width >= 1200
+        ? 3
+        : size.width >= 820
+        ? 2
+        : 1;
+    final maxGroupWidth = 420.0;
+
+    final groups = <_CapabilityGroupData>[
+      _CapabilityGroupData(
+        title: 'Business',
+        icon: Icons.business_center_outlined,
+        items: const [
+          'Business Development',
+          'Requirements & Scoping',
+          'Project Management',
+          'Agile Delivery',
+          'QA & UAT',
+        ],
+      ),
+      _CapabilityGroupData(
+        title: 'Engineering',
+        icon: Icons.integration_instructions_outlined,
+        items: const [
+          'Flutter (iOS • Android • Web)',
+          '.NET APIs & Services',
+          'REST & JSON APIs',
+          'Secure Auth (JWT/OAuth)',
+          'Performance Tuning',
+        ],
+      ),
+      _CapabilityGroupData(
+        title: 'Platform',
+        icon: Icons.cloud_outlined,
+        items: const [
+          'Firebase (Auth • FCM • Analytics)',
+          'App Releases (Google Play • App Store)',
+          'Monitoring & Crash Reports',
+          'Google Maps (Places • Routes)',
+        ],
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (_, __) {
+        return Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: groups.map((g) {
+            return ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: cols == 1 ? double.infinity : maxGroupWidth,
+                minWidth: 260,
+              ),
+              child: _CapabilityGroupCard(data: g),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+}
+
+class _CapabilityGroupData {
+  final String title;
+  final IconData icon;
+  final List<String> items;
+  const _CapabilityGroupData({
+    required this.title,
+    required this.icon,
+    required this.items,
+  });
+}
+
+class _CapabilityGroupCard extends StatelessWidget {
+  const _CapabilityGroupCard({required this.data});
+  final _CapabilityGroupData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return _GlassCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(data.icon, size: 18, color: scheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                data.title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (int i = 0; i < data.items.length; i++)
+                _CapabilityPill(
+                  label: data.items[i],
+                  // staggered entrance
+                  delayMs: 40 * i,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CapabilityPill extends StatefulWidget {
+  const _CapabilityPill({required this.label, this.delayMs = 0});
+  final String label;
+  final int delayMs;
+
+  @override
+  State<_CapabilityPill> createState() => _CapabilityPillState();
+}
+
+class _CapabilityPillState extends State<_CapabilityPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 260),
+  );
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide = Tween(
+    begin: const Offset(0, .12),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.delayMs == 0) {
+      _ctrl.forward();
+    } else {
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (mounted) _ctrl.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 160),
+            tween: Tween(begin: 0, end: 1),
+            builder: (context, t, child) {
+              return InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () {}, // optional: open a case study / detail later
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(.58),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: scheme.primary.withOpacity(.22)),
+                    boxShadow: const [
+                      BoxShadow(blurRadius: 10, color: Color(0x14000000)),
+                    ],
+                  ),
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF153466),
+                      letterSpacing: .2,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
