@@ -214,7 +214,7 @@ class _HeroSection extends StatefulWidget {
 }
 
 class _HeroSectionState extends State<_HeroSection>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late final AnimationController _inCtrl = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
@@ -234,116 +234,176 @@ class _HeroSectionState extends State<_HeroSection>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final isXS = size.width < 360; // very small phones
+    final isSM = size.width < 600; // phones
+    final isMD =
+        size.width >= 600 && size.width < 1024; // tablets / small laptop
+    final isLG = size.width >= 1024; // desktop+
 
-    // gentle float for the hero image
-    final t = (DateTime.now().millisecondsSinceEpoch / 2200) % (2 * math.pi);
-    final floatY = math.sin(t) * 6;
+    // Vertical space reserved for the chips block under the image
+    final chipsBlockH = isXS
+        ? 84.0
+        : isSM
+        ? 96.0
+        : 112.0;
+    final extraBottom = size.height < 720 ? 14.0 : 22.0;
+    final reservedForChips = chipsBlockH + extraBottom;
 
-    // ---- Keep the image exactly like your original look ----
-    // We’ll size the image first, then place the chips UNDER it as a separate widget.
-    // To avoid bottom overflow, we compute a dynamic image height that leaves room for chips.
-    // Estimate the chip block height (2 rows worst-case + spacing).
-    const baseChipBlock = 112.0; // ~ two rows of chips + spacing
-    final extraBottom = size.height < 760
-        ? 20.0
-        : 28.0; // breathing room on short screens
-    final reservedForChips = baseChipBlock + extraBottom;
-
-    // compute image height so the whole hero (image + chips) fits the viewport
-    final computedImageH = (size.height - reservedForChips).clamp(
-      size.height * 0.58,
-      size.height * 0.78,
+    // Image height as a fraction of viewport (keeps hero full-bleed but safe)
+    final imgH = (size.height - reservedForChips).clamp(
+      size.height * (isSM ? 0.50 : 0.58),
+      size.height * (isLG ? 0.78 : 0.72),
     );
-    final isWide = size.width >= 1100;
+
+    // On wide screens we can allow the image to extend more horizontally.
+    final imgW = () {
+      if (isLG) return size.width.clamp(720, 1600);
+      if (isMD) return size.width * 0.80;
+      return size.width; // phones: fill width
+    }();
+
+    // Tiny float (cheap) – no ticker here
+    final t = (DateTime.now().millisecondsSinceEpoch / 2200) % (2 * math.pi);
+    final floatY = math.sin(t) * (isSM ? 4 : 6);
+
+    // Paddings
+    final horizPad = size.width >= 1400
+        ? 24.0
+        : size.width >= 1000
+        ? 18.0
+        : 10.0;
+
+    // Compute InfoBox width by breakpoint
+    final boxW = () {
+      if (size.width < 360) return size.width - 24; // tiny phones
+      if (size.width < 600) return size.width * .82; // phones
+      if (size.width < 900) return 420.0; // small tablets
+      if (size.width < 1200) return 460.0; // laptops
+      return 500.0; // desktops
+    }().clamp(260.0, 560.0);
+
+    // Scale typography a bit with width
+    final boxScale = (boxW / 420.0).clamp(0.88, 1.15);
+
+    // Desired negative offset so it “hangs” outside the image on large screens
+    final desiredLeft = size.width >= 1100
+        ? -math.min(70.0, size.width * 0.06)
+        : (size.width >= 900 ? -48.0 : 12.0);
+
+    // We must clamp so global X >= 8 px from the screen edge.
+    // Global left of the stack = screenWidth - imgW (because the image block is right-aligned).
+    final stackGlobalLeft = size.width - imgW;
+    final minAllowedLeftRelativeToStack = 8.0 - stackGlobalLeft;
+
+    // Final left used
+    final clampedLeft = math.max(desiredLeft, minAllowedLeftRelativeToStack);
+
     return AnimatedBuilder(
       animation: _fade,
       builder: (context, _) {
-        return SizedBox(
-          height: size.height,
-          width: double.infinity,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // IMAGE AREA (flush to top & right; only left corners rounded)
-              Align(
-                alignment: Alignment.topRight,
-                child: SizedBox(
-                  height: computedImageH,
-                  width: isWide ? 1800 : 450,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Opacity(
-                        opacity: _fade.value,
-                        child: Transform.translate(
-                          offset: Offset(0, floatY),
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(5),
-                              bottomLeft: Radius.circular(63),
-                            ),
-                            child: SizedBox.expand(
-                              child: Image.asset(
-                                'lib/assets/mohammad.jpg',
-                                fit: BoxFit.cover,
-                                alignment: Alignment.topCenter,
-                                filterQuality: FilterQuality.high,
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: isSM ? 0 : 0),
+          child: SizedBox(
+            height: size.height,
+            width: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // IMAGE
+                Align(
+                  alignment: isLG ? Alignment.topRight : Alignment.topCenter,
+                  child: SizedBox(
+                    height: imgH.toDouble(),
+                    width: imgW.toDouble(),
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Opacity(
+                          opacity: _fade.value,
+                          child: Transform.translate(
+                            offset: Offset(0, floatY),
+                            child: ClipRRect(
+                              borderRadius: isLG
+                                  ? const BorderRadius.only(
+                                      topLeft: Radius.circular(6),
+                                      bottomLeft: Radius.circular(60),
+                                    )
+                                  : BorderRadius.circular(16),
+                              child: SizedBox.expand(
+                                child: Image.asset(
+                                  'lib/assets/mohammad.jpg',
+                                  fit: BoxFit.cover,
+                                  alignment: Alignment.topCenter,
+                                  filterQuality: FilterQuality.medium,
+                                  // bound decoding cost to what we render
+                                  cacheHeight:
+                                      (imgH *
+                                              MediaQuery.devicePixelRatioOf(
+                                                context,
+                                              ))
+                                          .clamp(600, 1600)
+                                          .round(),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
 
-                      // Info box on top of the image (unchanged)
-                      Positioned(
-                        left: size.width < 900 ? -40 : -70,
-                        bottom: 25,
-                        child: const _InfoBox(
-                          title: 'Mohammad Abu Jalboush',
-                          subtitle: 'CEO — VISION CIT',
-                          blurb:
-                              'Speed without compromise. Enterprise systems, elegant UX, and measurable outcomes.',
+                        // INFO BOX
+                        // --- just replace the old Positioned(...) with this block ---
+                        Positioned(
+                          left: clampedLeft,
+                          bottom: isSM ? 14.0 : 22.0,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: boxW.toDouble(),
+                              minWidth: 260,
+                            ),
+                            child: _InfoBox(
+                              title: 'Mohammad Abu Jalboush',
+                              subtitle: 'CEO — VISION CIT',
+                              blurb:
+                                  'Speed without compromise. Enterprise systems, elegant UX, and measurable outcomes.',
+                              scale:
+                                  boxScale, // <- makes the box grow/shrink cleanly
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              // SPACE between image and chips
-              const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
-              // CHIPS AREA — use full width so they form fewer rows
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  // smaller side padding = more usable width
-                  horizontal: size.width >= 1400
-                      ? 24
-                      : size.width >= 1000
-                      ? 18
-                      : 8,
-                ),
-                child: SizedBox(
-                  width: double.infinity, // let chips occupy the whole row
-                  child: Wrap(
-                    spacing: 5,
-                    runSpacing: 7,
-                    alignment:
-                        WrapAlignment.spaceEvenly, // spread across the row
-                    children: const [
-                      _HeroChip(
-                        label: 'Cross-Platform Apps (Flutter • Web • Mobile)',
-                      ),
-                      _HeroChip(label: 'Robust APIs & Integrations (.NET)'),
-                      _HeroChip(label: 'Secure Auth & Data Protection'),
-                      _HeroChip(label: 'Performance, Monitoring & Analytics'),
-                    ],
+                // CHIPS — always wrap & never overflow
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizPad),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: isLG
+                          ? WrapAlignment.spaceEvenly
+                          : WrapAlignment.center,
+                      children: const [
+                        _HeroChip(
+                          label: 'Cross-Platform Apps (Flutter • Web • Mobile)',
+                        ),
+                        _HeroChip(label: 'Robust APIs & Integrations (.NET)'),
+                        _HeroChip(label: 'Secure Auth & Data Protection'),
+                        _HeroChip(
+                          label: 'Performance • Monitoring • Analytics',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              SizedBox(height: 5),
-            ],
+                SizedBox(height: extraBottom),
+              ],
+            ),
           ),
         );
       },
@@ -486,20 +546,45 @@ class _HeroChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(.58),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: scheme.primary.withOpacity(.22)),
-        boxShadow: const [BoxShadow(blurRadius: 10, color: Color(0x14000000))],
+    final size = MediaQuery.sizeOf(context);
+
+    // Cap chip width relative to screen; keeps long labels tidy on phones
+    final maxChipW = size.width <= 360
+        ? size.width * .86
+        : size.width <= 600
+        ? size.width * .70
+        : size.width <= 1024
+        ? 420.0
+        : 520.0;
+
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: 38,
+        minWidth: 44,
+        maxWidth: maxChipW,
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w700,
-          color: const Color(0xFF153466), // brand primary
-          letterSpacing: .2,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(.58),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: scheme.primary.withOpacity(.22)),
+          boxShadow: const [
+            BoxShadow(blurRadius: 10, color: Color(0x14000000)),
+          ],
+        ),
+        child: DefaultTextStyle(
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF153466),
+            letterSpacing: .2,
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+          ),
         ),
       ),
     );
@@ -1167,67 +1252,85 @@ class _GlassCard extends StatelessWidget {
 }
 
 /// Your original InfoBox (kept)
+/// Responsive InfoBox (no fixed width/height)
 class _InfoBox extends StatelessWidget {
-  const _InfoBox({required this.title, required this.subtitle, this.blurb});
+  const _InfoBox({
+    required this.title,
+    required this.subtitle,
+    this.blurb,
+    this.scale = 1.0, // text size multiplier
+  });
 
   final String title;
   final String subtitle;
-
   final String? blurb;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+
+    // Base font sizes from your old box, multiplied by `scale`.
+    final titleStyle = Theme.of(context).textTheme.titleSmall?.copyWith(
+      fontWeight: FontWeight.w800,
+      fontSize: 32 * scale,
+      color: const Color(0xFF1A1A1A),
+    );
+
+    final subtitleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: const Color(0xFF4B4B4B),
+      fontWeight: FontWeight.w500,
+      fontSize: 20 * scale,
+    );
+
+    final blurbStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: const Color(0xFF4B4B4B),
+      fontSize: 16 * scale,
+      height: 1.35,
+    );
+
     return Material(
       elevation: 10,
       borderRadius: BorderRadius.circular(16),
       shadowColor: scheme.primary.withOpacity(.35),
       child: Container(
-        height: 190,
-        width: 409,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        // Let parent control width; we don’t fix height.
+        padding: EdgeInsets.symmetric(
+          horizontal: 14 * scale.clamp(0.85, 1.2),
+          vertical: 12 * scale.clamp(0.85, 1.2),
+        ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: scheme.outlineVariant.withOpacity(.25)),
+          color: Colors.white,
         ),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 32,
-                      color: const Color(0xFF1A1A1A),
-                    ),
+                    style: titleStyle,
                   ),
-                  const SizedBox(height: 4),
+                  SizedBox(height: 4 * scale),
                   Text(
                     subtitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: const Color(0xFF4B4B4B),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 20,
-                    ),
+                    style: subtitleStyle,
                   ),
                   if (blurb != null) ...[
-                    const SizedBox(height: 10),
+                    SizedBox(height: 10 * scale),
                     Text(
                       blurb!,
-                      maxLines: 2,
+                      maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF4B4B4B), // slogan color
-                        fontSize: 16,
-                        height: 1.35,
-                      ),
+                      style: blurbStyle,
                     ),
                   ],
                 ],
