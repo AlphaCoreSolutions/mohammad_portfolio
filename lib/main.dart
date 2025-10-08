@@ -115,8 +115,9 @@ class _PortfolioShellState extends State<PortfolioShell> {
           ScrollIntent: CallbackAction<ScrollIntent>(
             onInvoke: (intent) {
               final dir = intent.direction;
-              if (dir == AxisDirection.down && _index < _sections.length - 1)
+              if (dir == AxisDirection.down && _index < _sections.length - 1) {
                 _goTo(_index + 1);
+              }
               if (dir == AxisDirection.up && _index > 0) _goTo(_index - 1);
               return null;
             },
